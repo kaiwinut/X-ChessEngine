@@ -31,8 +31,3 @@
 *.out
 *.app
 
-# Mac Os
-*.DS_Store
-
-# Ignore dev notes
-DevNotes/
