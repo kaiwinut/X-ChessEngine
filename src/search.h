@@ -43,7 +43,7 @@ const int REDUCTION_LIMIT = 3;
 // Used for Null move pruning
 const int NULL_MOVE_REDUCTION = 2;
 
-class Search
+class Engine
 {
 public:
 	Game game;
@@ -59,13 +59,15 @@ public:
 	int pvLength[MAX_PLY];
 	int pvTable[MAX_PLY][MAX_PLY];
 
-	Search(Game curerntGame, int depth);
+	Engine();
+	void search(Game curerntGame, int depth);
 	int PVS(int depth, int alpha, int beta);
 	int quiescenceSearch(int alpha, int beta);	
 	int scoreMove(int move);
 	void sortMoves(int * moveList);
 	void enablePVScoring();
-	void printResults(int currentDepth, int fullResults);
+	void resetEngine();
+	void printResults(int currentDepth, int depth_limit, int fullResults);
 };
 
 #endif

@@ -8,6 +8,13 @@
 // Frequently used type
 typedef uint64_t Bitboard;
 
+// Debug flags
+const int DEBUG_EVAL = 0;
+const int DEBUG_MASK = 0;
+const int DEBUG_GAME = 0;
+const int DEBUG_ENGINE = 0;
+const int DEBUG_UCI = 0;
+
 // Frequently used enumerators
 enum Square {
 	A1, B1, C1, D1, E1, F1, G1, H1,
@@ -72,6 +79,7 @@ struct GameState
 	int castlingRights;
 	int moveNum;
 	int fiftyMoveRuleCount;	
+	uint64_t hashKey;
 };
 
 const std::string ASCII_PIECES[13] = {"P","N","B","R","Q","K","p","n","b","r","q","k","-"};
@@ -86,5 +94,15 @@ const std::string SQUARES[64] = {"a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
 							   	  "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6", 
 							   	  "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7", 
 							   	  "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8"};
+
+// FEN strings and constants for the perft
+const std::string EMPTY_BOARD = "8/8/8/8/8/8/8/8 w - - 0 0";
+const std::string START_POSITION = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const std::string TRICKY_POSITION = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+const std::string CMK_POSITION = "r2q1rk1/ppp2ppp/2n1bn2/2b1p3/3pP3/3P1NPP/PPP1NPB1/R1BQ1RK1 b - - 0 9";
+
+// Perft result look up
+const uint64_t START_POSITION_PERFT[7] = {20, 400, 8902, 197281, 4865609, 119060324, 3195901860};
+const uint64_t TRICY_POSITION_PERFT[6] = {48, 2039, 97862, 4085603, 193690690, 8031647685};
 
 #endif

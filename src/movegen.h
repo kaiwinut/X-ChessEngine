@@ -15,12 +15,20 @@ public:
 	int moveList[150];
 	int moveNum;
 	int fiftyMoveRuleCount;
+	// for generating trasposition tables
+	uint64_t hashKey;
+	uint64_t PIECE_KEY[12][64];
+	uint64_t ENPASSANT_KEY[64];
+	uint64_t CASTLE_KEY[16];
+	uint64_t SIDE_KEY;
 
 	Game();
 	Game(std::string fen);
 	void parseFen(std::string fen);
-	void initPieceBitboards();
 	std::string generateFen();
+	void initPieceBitboards();
+	void initHashKey();
+	uint64_t generateHashKey();
 	void generateAllMoves();
 	void printMoveList();
 	int getCaptures(int target, int attacker);

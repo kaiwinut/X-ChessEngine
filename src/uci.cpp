@@ -10,16 +10,14 @@ using std::cout;
 using std::endl;
 using std::string;
 
-void uciLoop()
+UCILoop::UCILoop()
 {
 	std::cin.clear();
 
 	string input;
-	// cout << "id name Kaaaiiiwww" << endl;
-	// cout << "id name Kai" << endl;
-	// cout << "uciok" << endl;
-
-	Game game;
+	cout << "id name Kaaaiiiwww" << endl;
+	cout << "id author Kai" << endl;
+	cout << "uciok" << endl;
 
 	while (1)
 	{
@@ -37,21 +35,25 @@ void uciLoop()
 		// parse uci position command
 		else if (input.compare(0, 8, "position", 8) == 0)
 		{
-			parsePosition(game, input);
-			// game.displayGame();
+			parsePosition(input);
+			engine.resetEngine();
+			if (DEBUG_UCI) { game.displayGame(); }
 		}		
 
 		// parse uci new game command
 		else if (input.compare(0, 10, "ucinewgame", 10) == 0)
 		{
-			parsePosition(game, "position startpos");
-			// game.displayGame();
+			parsePosition("position startpos");
+
+			if (DEBUG_UCI) { game.displayGame(); }
 		}	
 
 		// parse uci position command
 		else if (input.compare(0, 2, "go", 2) == 0)
 		{
-			parseGo(game, input);
+			parseGo(input);
+
+			if (DEBUG_UCI) { game.displayGame(); }
 		}	
 
 		else if (input.compare(0, 4, "quit", 4) == 0)
@@ -62,14 +64,14 @@ void uciLoop()
 		else if (input.compare(0, 3, "uci", 3) == 0)
 		{
 			cout << "id name Kaaaiiiwww" << endl;
-			cout << "id name Kai" << endl;
+			cout << "id author Kai" << endl;
 			cout << "uciok" << endl;
 		}
 	}
 }
 
 // Parse user/GUI move command (e.g. e7e8q)
-int parseMove(Game& game, string moveString)
+int UCILoop::parseMove(string moveString)
 {
 	game.generateAllMoves();
 	int startSquare = (moveString[0] - 'a')	+ 8 * (atoi(&moveString[1]) - 1);
@@ -116,7 +118,7 @@ int parseMove(Game& game, string moveString)
     // init position from fen string and make moves on chess board
     position fen r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1 moves e2a6 e8g8
 */
-void parsePosition(Game& game, string command) 
+void UCILoop::parsePosition(string command) 
 {
 	if (command.compare(9, 8, "startpos", 8) == 0)
 	{ 
@@ -136,7 +138,7 @@ void parsePosition(Game& game, string command)
 					{
 						string moveString = moveCommand.substr(0, i);
 						// cout << moveString << endl;
-						int move = parseMove(game, moveString);
+						int move = parseMove(moveString);
 						if (move != 0)
 						{
 							game.makeMove(move);
@@ -147,7 +149,7 @@ void parsePosition(Game& game, string command)
 					{
 						string moveString = moveCommand.substr(0, i);
 						// cout << moveString << endl;
-						int move = parseMove(game, moveString);
+						int move = parseMove(moveString);
 						if (move != 0)
 						{
 							game.makeMove(move);
@@ -191,8 +193,7 @@ void parsePosition(Game& game, string command)
 						if (i < moveCommand.length() && moveCommand[i] == ' ')
 						{
 							string moveString = moveCommand.substr(0, i);
-							// cout << moveString << endl;
-							int move = parseMove(game, moveString);
+							int move = parseMove(moveString);
 							if (move != 0)
 							{
 								game.makeMove(move);
@@ -202,8 +203,7 @@ void parsePosition(Game& game, string command)
 						else if (i == moveCommand.length())
 						{
 							string moveString = moveCommand.substr(0, i);
-							// cout << moveString << endl;
-							int move = parseMove(game, moveString);
+							int move = parseMove(moveString);
 							if (move != 0)
 							{
 								game.makeMove(move);
@@ -217,7 +217,7 @@ void parsePosition(Game& game, string command)
 	}
 }
 
-void parseGo(Game& game, string command)
+void UCILoop::parseGo(string command)
 {
 	int depth = -1;
 	string depthCommand = command;
@@ -227,8 +227,36 @@ void parseGo(Game& game, string command)
 		depthCommand.erase(0, 9);
 		depth = stoi(depthCommand);
 		// cout << depthCommand << endl;
-		Search search(game, depth);
-		cout<< "bestmove " << SQUARES[getStartSquare(search.pvTable[0][0])] << SQUARES[getEndSquare(search.pvTable[0][0])] << endl;
+		engine.search(game, depth);
+		int bestMove = engine.pvTable[0][0];
+		int promotion = getPromotion(bestMove);
+		if (promotion != NULL_PIECE)
+		{
+			if (promotion == Q || promotion == q) 
+			{
+				cout << "bestmove " << SQUARES[getStartSquare(bestMove)] << SQUARES[getEndSquare(bestMove)] << 'q' << endl;
+			}
+			if (promotion == R || promotion == r) 
+			{
+				cout << "bestmove " << SQUARES[getStartSquare(bestMove)] << SQUARES[getEndSquare(bestMove)] << 'r' << endl;
+			}
+			if (promotion == N || promotion == n) 
+			{
+				cout << "bestmove " << SQUARES[getStartSquare(bestMove)] << SQUARES[getEndSquare(bestMove)] << 'n' << endl;
+			}
+			if (promotion == B || promotion == b) 
+			{
+				cout << "bestmove " << SQUARES[getStartSquare(bestMove)] << SQUARES[getEndSquare(bestMove)] << 'b' << endl;
+			}			
+		}
+		else
+		{
+			cout << "bestmove " << SQUARES[getStartSquare(bestMove)] << SQUARES[getEndSquare(bestMove)] << endl;
+		}
+		if (bestMove != 0)
+		{
+			game.makeMove(bestMove);
+		}
 	}
 }
 

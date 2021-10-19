@@ -1,6 +1,16 @@
 #ifndef MASKS_H
 #define MASKS_H
 
+// Initialize pre-generated look up move lists
+namespace AttackMasks
+{
+	void init();
+	void printDebug();
+}
+
+void initLeaperAttacks();
+void initSlideAttacks(int isRook);
+
 // File masks
 const Bitboard FILE_A_MASK = 0x101010101010101;
 const Bitboard FILE_B_MASK = FILE_A_MASK << 1;
@@ -21,11 +31,7 @@ const Bitboard RANK_6_MASK = RANK_5_MASK << 8;
 const Bitboard RANK_7_MASK = RANK_6_MASK << 8;
 const Bitboard RANK_8_MASK = RANK_7_MASK << 8;
 
-namespace AttackMasks
-{
-	void init();
-}
-
+// Return pseudo legal bishop moves by converting the occupancy mask into a magic index, and look up pre-generated move list
 Bitboard generateBishopAttacks(int square, Bitboard occupancy);
 Bitboard generateRookAttacks(int square, Bitboard occupancy);
 Bitboard generateQueenAttacks(int square, Bitboard occupancy);
@@ -38,6 +44,7 @@ extern Bitboard BISHOP_ATTACKS[64][512];
 extern Bitboard ROOK_RELEVANT_OCCUPANCY[64];
 extern Bitboard ROOK_ATTACKS[64][4096];
 
+// Lists for the generation of bishop, rook, and queen moves
 const int BISHOP_OCCUPANCY_COUNT[64] = {6, 5, 5, 5, 5, 5, 5, 6, 
 								 		5, 5, 5, 5, 5, 5, 5, 5, 
 								  		5, 5, 7, 7, 7, 7, 5, 5, 
@@ -56,6 +63,7 @@ const int ROOK_OCCUPANCY_COUNT[64] = {12, 11, 11, 11, 11, 11, 11, 12,
 									  11, 10, 10, 10, 10, 10, 10, 11, 
 									  12, 11, 11, 11, 11, 11, 11, 12};
 
+// Pre-generated magic numbers used to generated magic indicies
 const Bitboard ROOK_MAGICS[64] = {
 	0x8a80104000800020ULL,
 	0x140002000100040ULL, 
@@ -189,5 +197,8 @@ const Bitboard BISHOP_MAGICS[64] = {
 	0x8918844842082200ULL, 
 	0x4010011029020020ULL	
 };
+
+// Random uint64 generator
+uint64_t generateRandomUint64();
 
 #endif

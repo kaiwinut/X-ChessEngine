@@ -14,17 +14,17 @@ using std::string;
 
 int main()
 {
-	// Initilize all libraries needed
+	// Initilize all pre-grenerated look up lists needed
 	AttackMasks::init();
 	Evaluation::init();
-
-	// Perft(START_POSITION, 6);
-	// Game game("4k3/Q7/4K3/8/8/8/8/8 w - - 0 0");
-	// Game game(TRICKY_POSITION);
+	// Perft(START_POSITION, 2);
+	// Game game(START_POSITION);
+	// Game game("1R6/5bkp/P7/2pp1p2/5P2/2P2r2/3K2p1/8 b - - 0 55");
+	// game.displayGame();
 	// game.generateAllMoves();
-	// parsePosition(game, command);
-	// Search(game, 7);
-	uciLoop();
+	// Engine engine;
+	// engine.search(game, 7);
+	UCILoop();
 
 	return 0;
 }

@@ -4,9 +4,17 @@
 #include <iostream>
 #include "movegen.h"
 
-int parseMove(Game& game, std::string moveString);
-void parsePosition(Game& game, std::string command);
-void parseGo(Game& game, std::string command);
-void uciLoop();
+class UCILoop
+{
+public:
+	Game game;
+	Engine engine;
+
+	UCILoop();	
+	int parseMove(std::string moveString);
+	void parsePosition(std::string command);
+	void parseGo(std::string command);
+};
+
 
 #endif

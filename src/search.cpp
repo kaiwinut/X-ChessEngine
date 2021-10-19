@@ -11,31 +11,35 @@ using std::cout;
 using std::endl;
 using std::string;
 
-Search::Search(Game curerntGame, int depth)
+Engine::Engine()
 {
-	game = curerntGame;
+	resetEngine();
+}
+
+void Engine::search(Game curerntGame, int depth)
+{
+	game = curerntGame;	
 	nodes = 0, ply = 0, bestEval = 0, inPV = 0, scorePV = 0;
 	duration = 0.0, knps = 0.0;
-	memset(killerMoves, 0, sizeof(killerMoves));
-	memset(historyMoves, 0, sizeof(historyMoves));
-	memset(pvLength, 0, sizeof(pvLength));
-	memset(pvTable, 0, sizeof(pvTable));
 
 	for (int currentDepth = 1; currentDepth <= depth; currentDepth ++)
 	{
+		// Follow the principle variation by default
 		inPV = 1;
+		// Run the principle variation search and measure the time
 		clock_t startTime = clock();
 		bestEval = PVS(currentDepth, -INF, INF);
 		clock_t endTime = clock();	
+		// Calculate the time and kilo nodes per second
 		duration = (float) (endTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
 		knps = ((float)nodes) / duration;
 
-		// Second param set to false to show part of the result in two lines
-		printResults(currentDepth, 0);
+		// Second parameter toggles debug mode
+		printResults(currentDepth, depth, DEBUG_ENGINE);
 	}
 }
 
-int Search::PVS(int depth, int alpha, int beta)
+int Engine::PVS(int depth, int alpha, int beta)
 {
 	pvLength[ply] = ply;
 
@@ -164,7 +168,7 @@ int Search::PVS(int depth, int alpha, int beta)
 	return alpha;
 }
 
-int Search::quiescenceSearch(int alpha, int beta)
+int Engine::quiescenceSearch(int alpha, int beta)
 {
 	nodes ++;
 	int evaluation = evaluate(game);
@@ -213,7 +217,7 @@ int Search::quiescenceSearch(int alpha, int beta)
 	return alpha;
 }
 
-int Search::scoreMove(int move)
+int Engine::scoreMove(int move)
 {
 	if (move == 0)
 	{
@@ -247,7 +251,7 @@ int Search::scoreMove(int move)
 	}
 }
 
-void Search::sortMoves(int * moveList)
+void Engine::sortMoves(int * moveList)
 {
 	int* move = moveList;
 	int* moveStart = move;
@@ -270,7 +274,7 @@ void Search::sortMoves(int * moveList)
 	}
 }
 
-void Search::enablePVScoring()
+void Engine::enablePVScoring()
 {
 	inPV = 0;
 	int *move = game.moveList;
@@ -286,37 +290,86 @@ void Search::enablePVScoring()
 	}
 }
 
-void Search::printResults(int currentDepth, int fullResults)
+void Engine::resetEngine()
 {
-	if (fullResults)
+	nodes = 0, ply = 0, bestEval = 0, inPV = 0, scorePV = 0;
+	duration = 0.0, knps = 0.0;
+
+	memset(killerMoves, 0, sizeof(killerMoves));
+	memset(historyMoves, 0, sizeof(historyMoves));
+	memset(pvLength, 0, sizeof(pvLength));
+	memset(pvTable, 0, sizeof(pvTable));
+}
+
+void Engine::printResults(int currentDepth, int depth_limit, int debug)
+{
+	// Show full result
+	if (debug)
 	{
-		cout << "========================" << endl;
-		cout << "Search Results" << endl;
-		cout << endl;
-		cout << "Depth: " << currentDepth << endl;
-		cout << "Nodes: " << nodes << " (" << knps << " KNps)" << endl;
-		cout << "Duration: " << duration << " ms" << endl;
-		cout << "Est. eval: " << bestEval << endl;
-		cout << "Best move: " << SQUARES[getStartSquare(pvTable[0][0])] << SQUARES[getEndSquare(pvTable[0][0])] << endl;
-		cout << "PV: ";
+		cout << "info depth " << currentDepth << " score cp " << bestEval << " time " << (int)duration << " nodes " << nodes << " nps " << (int)(knps * 1000) << " pv ";
 		for (int i = 0; i < pvLength[0]; i ++)
 		{
-			cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << " ";
+			int promotion = getPromotion(pvTable[0][i]);
+			if (promotion != NULL_PIECE) 
+			{
+				if (promotion == Q || promotion == q) 
+				{
+					cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'q' << " ";
+				}
+				if (promotion == R || promotion == r) 
+				{
+					cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'r' << " ";
+				}
+				if (promotion == N || promotion == n) 
+				{
+					cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'n' << " ";
+				}
+				if (promotion == B || promotion == b) 
+				{
+					cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'b' << " ";
+				}
+			}
+			else
+			{
+				cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << " ";
+			}
 		}
-		cout << endl;
-		cout << "========================" << endl;			
+		cout << '\n' << endl;	
 	}
+	// If not in debug mode, print results in uci protocol style
 	else
 	{
-		cout << "Dp: " << currentDepth << " / ";
-		cout << "No: " << nodes << " / ";
-		cout << "T: " << duration << "ms / ";
-		cout << "Ev: " << bestEval << endl;
-		cout << "PV: ";
-		for (int i = 0; i < pvLength[0]; i ++)
+		if (currentDepth == depth_limit)
 		{
-			cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << " ";
+			cout << "info depth " << currentDepth << " score cp " << bestEval << " time " << (int)duration << " nodes " << nodes << " nps " << (int)(knps * 1000) << " pv";
+			for (int i = 0; i < pvLength[0]; i ++)
+			{
+				int promotion = getPromotion(pvTable[0][i]);
+				if (promotion != NULL_PIECE) 
+				{
+					if (promotion == Q || promotion == q) 
+					{
+						cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'q';
+					}
+					if (promotion == R || promotion == r) 
+					{
+						cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'r';
+					}
+					if (promotion == N || promotion == n) 
+					{
+						cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'n';
+					}
+					if (promotion == B || promotion == b) 
+					{
+						cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'b';
+					}
+				}
+				else
+				{
+					cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])];
+				}
+			}
+			cout << endl;
 		}
-		cout << '\n' << endl;
 	}
 }
