@@ -1,5 +1,7 @@
-#ifndef SEARCH_H
-#define SEARCH_H
+#ifndef ENGINE_H
+#define ENGINE_H
+
+const std::string VERSION = "1.0";
 
 // Used for negamx and alpha beta pruning
 const int INF = 50000;
@@ -31,7 +33,6 @@ const int MVV_LVA[12][12] = {
 // Used for Tranposition Tables
 const int MATE_SCORE = 48000;
 const int MATE_VALUE = 49000;
-const int NO_HASH_ENTRY = 100000;
 
 // Used for Aspiration Windows
 const int WINDOW_SIZE = 50;
@@ -43,14 +44,32 @@ const int REDUCTION_LIMIT = 3;
 // Used for Null move pruning
 const int NULL_MOVE_REDUCTION = 2;
 
+// 
+const int ASPIRATION_WINDOW_SIZE = 50;
+
+// Transposition table
+const int HASH_EXACT = 0;
+const int HASH_ALPHA = 1;
+const int HASH_BETA = 2;
+const int HASH_SIZE = 0x100000;
+const int NO_HASH_ENTRY = 100000;
+
+struct HashEntry
+{
+	uint64_t hashKey;
+	int depth;
+	int flag;
+	int score;
+};
+
 class Engine
 {
 public:
 	Game game;
 	int nodes;
 	int ply;
-	float duration;
-	float knps;
+	int duration;
+	int knps;
 	int bestEval;
 	int inPV;
 	int scorePV;
@@ -58,6 +77,10 @@ public:
 	int historyMoves[12][64];
 	int pvLength[MAX_PLY];
 	int pvTable[MAX_PLY][MAX_PLY];
+	int hashEntries;
+	HashEntry * tt = NULL;
+	int repetitionTable[1000];
+	int repetitionIndex;
 
 	Engine();
 	void search(Game curerntGame, int depth);
@@ -67,7 +90,35 @@ public:
 	void sortMoves(int * moveList);
 	void enablePVScoring();
 	void resetEngine();
-	void printResults(int currentDepth, int depth_limit, int fullResults);
+	void clearTranspositionTable();
+	void initTranspositionTable(int mb);
+	int readHashEntry(int depth, int alpha, int beta);
+	void writeHashEntry(int depth, int alpha, int beta);
+	int isRepetition();
+	void printResults(int currentDepth, int depth_limit, int fullResults);	
+
+	/*** UCI Section ***/
+
+	int quit = 0;
+	int movestogo = 70;
+	int movetime = -1;
+	int uciTime = -1;
+	int inc = 0;
+	int starttime = 0;
+	int stoptime = 0;
+	int timeset = 0;
+	int stopped = 0;
+
+	void uciLoop();
+	int parseMove(Game& game, std::string moveString);
+	void parsePosition(Game& game, std::string command);
+	void parseGo(Game& game, std::string command);
+
+	void resetParams();
+	int getTimems();
+	int waitForInput();
+	void readInput();
+	void communicate();
 };
 
 #endif

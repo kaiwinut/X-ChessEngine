@@ -353,7 +353,7 @@ GameState Game::makeNullMove()
 	enPassantSquare = SQ_NONE;	
 
 	// Switch sides
-	side = !side;
+	side ^= 1;
 	hashKey ^= SIDE_KEY;
 
 	return prevState;
@@ -530,7 +530,7 @@ GameState Game::makeMove(int move, int moveType)
 	}
 
 	// Switch sides
-	side = !side;
+	side ^= 1;
 	hashKey ^= SIDE_KEY;
 
 	// Hash from scratch to check for errors

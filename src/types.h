@@ -12,7 +12,7 @@ typedef uint64_t Bitboard;
 const int DEBUG_EVAL = 0;
 const int DEBUG_MASK = 0;
 const int DEBUG_GAME = 0;
-const int DEBUG_ENGINE = 0;
+const int DEBUG_ENGINE = 1;
 const int DEBUG_UCI = 0;
 
 // Frequently used enumerators
@@ -56,6 +56,11 @@ enum Piece {
 	P, N, B, R, Q, K, p, n, b, r, q, k, NULL_PIECE
 };
 
+// piece types
+enum PieceType { 
+	PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING 
+};
+
 enum CastlingRights {
 	WK = 1,
 	WQ = 2,
@@ -65,6 +70,11 @@ enum CastlingRights {
 
 enum MoveType {
 	ALL_MOVES, ONLY_CAPTURES
+};
+
+// game phases
+enum GamePhase { 
+	OPENING, ENDGAME, MIDDLEGAME 
 };
 
 // GameState structure used to store previous game state
