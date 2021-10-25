@@ -3,8 +3,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <sys/time.h>
-#include "bitboard.h"
-#include "types.h"
+#include "utils.h"
 #include "masks.h"
 #include "movegen.h"
 #include "eval.h"
@@ -56,8 +55,11 @@ void Engine::search(Game curerntGame, int depth)
 		alpha = bestEval - ASPIRATION_WINDOW_SIZE;
 		beta = bestEval + ASPIRATION_WINDOW_SIZE;
 
-		// Second parameter toggles debug mode
-		printResults(currentDepth, depth, DEBUG_ENGINE);
+		if (pvLength[0])
+		{
+			// Second parameter toggles debug mode
+			printResults(currentDepth, depth, DEBUG_ENGINE);			
+		}
 	}
 }
 
@@ -69,25 +71,38 @@ int Engine::PVS(int depth, int alpha, int beta)
 	}
 
 	int score;
+	int bestMove = 0;
+	int hashFlag = HASH_ALPHA;
+	int pvNode = (beta - alpha > 1);
+	int staticEval = evaluate(game);
+	int legalMoves = 0;
+	int isInCheck = game.isSquareAttacked(getLeastSignificantBitIndex((game.side == WHITE ? game.bitboards[K] : game.bitboards[k])), game.side ^ 1);
+
 	pvLength[ply] = ply;
 
-	score = readHashEntry(depth, alpha, beta);
-	int hashFlag = HASH_ALPHA;
+	score = readHashEntry(depth, alpha, beta, bestMove);
 
-	if (ply > 0 && isRepetition()) { return 0; }
-	if (ply > 0 && score != NO_HASH_ENTRY && (beta - alpha <= 1)) { return score; }
+	if (ply > 0 && (isRepetition() || game.fiftyMoveRuleCount >= 50)) { return 0; }
+	if (ply > 0 && score != NO_HASH_ENTRY && !pvNode) { return score; }
 
 	// Check for all captures possible at the end of the search 
 	if (depth <= 0) { return quiescenceSearch(alpha, beta); }
 
-	if (ply > MAX_PLY - 1) { return evaluate(game); }
+	if (ply > MAX_PLY - 1) { return staticEval; }
 
 	nodes ++;
 
-	int legalMoves = 0;
-	int isInCheck = game.isSquareAttacked(getLeastSignificantBitIndex((game.side == WHITE ? game.bitboards[K] : game.bitboards[k])), game.side ^ 1);
-
 	if (isInCheck) { depth ++; }
+
+	// Evaluation pruning (static null move pruning)
+	if (depth < 3 && !pvNode && isInCheck == 0 && abs(beta - 1) > -INF + 100)
+	{
+		int evalMargin = depth * 120;
+		if (staticEval - evalMargin >= beta)
+		{
+			return staticEval - evalMargin;
+		}
+	}
 
 	// Null move pruning
 	if (depth >= 3 && isInCheck == 0 && ply > 0)
@@ -111,12 +126,38 @@ int Engine::PVS(int depth, int alpha, int beta)
 		}
 	}
 
+	// Razoring (Strelka)
+	if (depth <= 3 && isInCheck == 0 && !pvNode)
+	{
+		score = staticEval + 125;
+		int newScore;
+		if (score < beta)
+		{
+			if (depth == 1)
+			{
+				newScore = quiescenceSearch(alpha, beta);
+				return (newScore > score) ? newScore : score;
+			}
+
+			score += 175;
+
+			if (score < beta && depth <= 3)
+			{
+				newScore = quiescenceSearch(alpha, beta);
+				if (newScore < beta)
+				{
+					return (newScore > score) ? newScore : score;
+				}
+			}
+		}
+	}
+
 	game.generateAllMoves();
 
 	// Make sure that we are actually inside PV before we switch on score PV move flag
 	if (inPV) { enablePVScoring(); }
 
-	sortMoves(game.moveList);
+	sortMoves(game.moveList, bestMove);
 	int *move = game.moveList;
 	int movesSearched = 0;
 
@@ -179,7 +220,7 @@ int Engine::PVS(int depth, int alpha, int beta)
 		if (score > alpha)
 		{
 			hashFlag = HASH_EXACT;
-
+			bestMove = *move;
 			alpha = score;
 
 			// Write move to triangular principle variation table
@@ -194,7 +235,7 @@ int Engine::PVS(int depth, int alpha, int beta)
 
 			if (score >= beta)
 			{
-				writeHashEntry(depth, beta, HASH_BETA);
+				writeHashEntry(depth, bestMove, beta, HASH_BETA);
 
 				if (getCaptureFlag(*move) == 0)
 				{
@@ -217,7 +258,7 @@ int Engine::PVS(int depth, int alpha, int beta)
 		else { return 0; }
 	}
 
-	writeHashEntry(depth, alpha, hashFlag);
+	writeHashEntry(depth, bestMove, alpha, hashFlag);
 
 	return alpha;
 }
@@ -245,12 +286,34 @@ int Engine::quiescenceSearch(int alpha, int beta)
 	}
 
 	game.generateAllMoves();
-	sortMoves(game.moveList);
+	sortMoves(game.moveList, 0);
 
 	int *move = game.moveList;
 	
 	while (*move)
 	{
+		if (getCaptureFlag(*move))
+		{
+			// Delta pruning
+			if (game.gamePhaseScore - MATERIAL_ABS[0][getCapturedPiece(*move)] >= ENDGAME_PHASE_SCORE && 
+				(evaluation + MATERIAL_ABS[0][getCapturedPiece(*move)] + 200 < alpha) && getPromotion(*move) == NULL_PIECE)
+			{
+				move ++;
+				continue;
+			}
+			// Prune bad captures
+			if (badCapture(*move) && getPromotion(*move) == NULL_PIECE && MATERIAL_ABS[0][getCapturedPiece(*move)] != MATERIAL_ABS[0][getPiece(*move)])
+			{
+				move ++;
+				continue;				
+			}
+		}
+		else
+		{
+			move ++;
+			continue;
+		}
+
 		ply ++;
 
 		repetitionIndex ++;
@@ -286,11 +349,30 @@ int Engine::quiescenceSearch(int alpha, int beta)
 	return alpha;
 }
 
-int Engine::scoreMove(int move)
+int Engine::badCapture(int move)
 {
-	if (move == 0)
+	int piece = getPiece(move);
+	int cap = getCapturedPiece(move);
+
+	if (piece == P || piece == p) { return 0; }
+
+	if (MATERIAL_ABS[0][cap] - MATERIAL_ABS[0][piece] >= -50) { return 0; }
+
+	if (piece <= K)
 	{
-		return -1;
+		if ((PAWN_ATTACKS[WHITE][getEndSquare(move)] & game.bitboards[p]) && (MATERIAL_ABS[0][cap] + 200 - MATERIAL_ABS[0][piece] < 0))
+		{
+			return 1;
+		}
+	}		
+	return 0;
+}
+
+int Engine::scoreMove(int move, int bestMove)
+{
+	if (move == bestMove && bestMove != 0)
+	{
+		return BEST_MOVE_SCORE;
 	}
 
 	if (scorePV && move == pvTable[0][ply])
@@ -318,9 +400,11 @@ int Engine::scoreMove(int move)
 			return historyMoves[getPiece(move)][getEndSquare(move)];
 		}
 	}
+
+	return -1;
 }
 
-void Engine::sortMoves(int * moveList)
+void Engine::sortMoves(int * moveList, int bestMove)
 {
 	int* move = moveList;
 	int* moveStart = move;
@@ -330,7 +414,7 @@ void Engine::sortMoves(int * moveList)
 		int tmp = 0; 
 		while(p != moveStart)
 		{
-			if (scoreMove(*p) > scoreMove(*(p-1)))
+			if (scoreMove(*p, bestMove) > scoreMove(*(p-1), bestMove))
 			{
 				tmp = *p;
 				*p = *(p-1);
@@ -410,7 +494,7 @@ void Engine::initTranspositionTable(int mb)
 	}
 }
 
-int Engine::readHashEntry(int depth, int alpha, int beta)
+int Engine::readHashEntry(int depth, int alpha, int beta, int& bestMove)
 {
 	HashEntry *hashEntry = &tt[game.hashKey % hashEntries];
 	if ( hashEntry -> hashKey == game.hashKey )
@@ -434,11 +518,12 @@ int Engine::readHashEntry(int depth, int alpha, int beta)
 				return beta;
 			}
 		}
+		bestMove = hashEntry -> bestMove;
 	}
 	return NO_HASH_ENTRY;
 }
 
-void Engine::writeHashEntry(int depth, int score, int flag)
+void Engine::writeHashEntry(int depth, int bestMove, int score, int flag)
 {
 	HashEntry *hashEntry = &tt[game.hashKey % hashEntries];
 
@@ -449,6 +534,7 @@ void Engine::writeHashEntry(int depth, int score, int flag)
 	hashEntry -> depth = depth;
 	hashEntry -> flag = flag;
 	hashEntry -> hashKey = game.hashKey;
+	hashEntry -> bestMove = bestMove;
 }
 
 int Engine::isRepetition()
@@ -468,7 +554,18 @@ void Engine::printResults(int currentDepth, int depth_limit, int debug)
 	// Show full result
 	if (debug)
 	{
-		cout << "info depth " << currentDepth << " score cp " << bestEval << " time " << (int)duration << " nodes " << nodes << " nps " << knps * 1000 << " pv ";
+		if (bestEval > -MATE_VALUE && bestEval < -MATE_SCORE)
+		{
+			cout << "info score mate " << - (bestEval + MATE_VALUE) / 2 - 1 << " depth " << currentDepth << " time " << duration << " nodes " << nodes << " nps " << knps * 1000 << " pv";
+		}
+		if (bestEval > MATE_SCORE && bestEval < MATE_VALUE)
+		{
+			cout << "info score mate " << (MATE_VALUE - bestEval) / 2 + 1 << " depth " << currentDepth << " time " << duration << " nodes " << nodes << " nps " << knps * 1000 << " pv";
+		}
+		else
+		{
+			cout << "info depth " << currentDepth << " score cp " << bestEval << " time " << (int)duration << " nodes " << nodes << " nps " << knps * 1000 << " pv";
+		}			
 		for (int i = 0; i < pvLength[0]; i ++)
 		{
 			int promotion = getPromotion(pvTable[0][i]);
@@ -476,24 +573,24 @@ void Engine::printResults(int currentDepth, int depth_limit, int debug)
 			{
 				if (promotion == Q || promotion == q) 
 				{
-					cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'q' << " ";
+					cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'q';
 				}
 				if (promotion == R || promotion == r) 
 				{
-					cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'r' << " ";
+					cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'r';
 				}
 				if (promotion == N || promotion == n) 
 				{
-					cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'n' << " ";
+					cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'n';
 				}
 				if (promotion == B || promotion == b) 
 				{
-					cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'b' << " ";
+					cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << 'b';
 				}
 			}
 			else
 			{
-				cout << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])] << " ";
+				cout << ' ' << SQUARES[getStartSquare(pvTable[0][i])] << SQUARES[getEndSquare(pvTable[0][i])];
 			}
 		}
 		cout << endl;	
@@ -503,7 +600,18 @@ void Engine::printResults(int currentDepth, int depth_limit, int debug)
 	{
 		if (currentDepth == depth_limit)
 		{
-			cout << "info depth " << currentDepth << " score cp " << bestEval << " time " << (int)duration << " nodes " << nodes << " nps " << knps * 1000 << " pv";
+			if (bestEval > -MATE_VALUE && bestEval < -MATE_SCORE)
+			{
+				cout << "info score mate " << - (bestEval + MATE_VALUE) / 2 - 1 << " depth " << currentDepth << " time " << duration << " nodes " << nodes << " nps " << knps * 1000 << " pv";
+			}
+			if (bestEval > MATE_SCORE && bestEval < MATE_VALUE)
+			{
+				cout << "info score mate " << (MATE_VALUE - bestEval) / 2 + 1 << " depth " << currentDepth << " time " << duration << " nodes " << nodes << " nps " << knps * 1000 << " pv";
+			}
+			else
+			{
+				cout << "info depth " << currentDepth << " score cp " << bestEval << " time " << (int)duration << " nodes " << nodes << " nps " << knps * 1000 << " pv";
+			}						
 			for (int i = 0; i < pvLength[0]; i ++)
 			{
 				int promotion = getPromotion(pvTable[0][i]);
@@ -564,7 +672,7 @@ void Engine::uciLoop()
 		else if (input.compare(0, 8, "position", 8) == 0)
 		{
 			parsePosition(game, input);
-			if (DEBUG_UCI) { game.displayGame(); }
+			if (DEBUG_UCI) { displayGame(game); }
 		}		
 
 		// parse uci new game command
@@ -572,7 +680,7 @@ void Engine::uciLoop()
 		{
 			parsePosition(game, "position startpos");
 			this -> resetEngine();
-			if (DEBUG_UCI) { game.displayGame(); }
+			if (DEBUG_UCI) { displayGame(game); }
 		}	
 
 		else if (input.compare(0, 3, "uci", 3) == 0)
@@ -587,7 +695,7 @@ void Engine::uciLoop()
 		else if (input.compare(0, 2, "go", 2) == 0)
 		{
 			parseGo(game, input);
-			if (DEBUG_UCI) { game.displayGame(); }
+			if (DEBUG_UCI) { displayGame(game); }
 		}	
 
 		else if (input.compare(0, 4, "quit", 4) == 0)
@@ -815,11 +923,6 @@ void Engine::parseGo(Game& game, string command)
     // if move time is available
     if(movetime != -1)
     {
-    	if (movetime > 5000)
-    	{
-    		movetime = 5000;
-    	}
-
         // set time equal to move time
         uciTime = movetime;
 
@@ -841,14 +944,14 @@ void Engine::parseGo(Game& game, string command)
 
         // set up timing
         uciTime /= movestogo;
-        uciTime -= 100;
-        stoptime = starttime + uciTime + inc / 3;
+        if (uciTime > 1500) { uciTime -= 100; }
+        stoptime = starttime + uciTime + inc;
     }
 
     // if depth is not available
     if(depth == -1)
         // set depth to 64 plies (takes ages to complete...)
-        depth = 24;
+        depth = 64;
 
     // print debug info
     if (DEBUG_ENGINE)

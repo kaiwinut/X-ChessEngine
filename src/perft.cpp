@@ -1,6 +1,6 @@
 #include <iostream>
 #include <time.h>
-#include "types.h"
+#include "utils.h"
 #include "movegen.h"
 #include "perft.h"
 
@@ -11,19 +11,21 @@ using std::string;
 Perft::Perft(string fen, int depth)
 {	
 	depth = depth;
-	nodesSearched = 0;
-	duration = 0.0;
-	knps = 0.0;
+	nodesSearched = 0, duration = 0, knps = 0;
 	game.parseFen(fen);
+
 	cout << "\nStarting perft at depth " << depth << '!' << endl; 
 	cout << "..." << endl;
 	cout << "...\n" << endl;
-	game.displayGame();
+	displayGame(game);
+
 	clock_t startTime = clock();
 	perft_driver(depth);
 	clock_t endTime = clock();	
-	duration = (float) (endTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
-	knps = (float) (nodesSearched / duration);
+
+	duration = (endTime - startTime) * 1000.0 / CLOCKS_PER_SEC;
+	knps = nodesSearched / duration;
+	
 	cout << "========================" << endl;
 	cout << "Performance Test Results" << endl;
 	cout << endl;

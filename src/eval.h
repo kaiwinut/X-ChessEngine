@@ -1,8 +1,13 @@
 #ifndef EVAL_H
 #define EVAL_H
 
-#include "types.h"
 #include "movegen.h"
+
+namespace Evaluation
+{
+    void init();
+    void printDebug();
+}
 
 // Give a static evaluation of the position by assessing material, piece placement, pawn structures, king safety, and piece mobility
 int evaluate(Game game);
@@ -16,6 +21,16 @@ const int MATERIAL[2][12] =
     
     // endgame material score
     94, 281, 297, 512,  936, 12000, -94, -281, -297, -512,  -936, -12000
+};
+
+// Absolute value of piece material
+const int MATERIAL_ABS[2][12] =
+{
+    // opening material score
+    82, 337, 365, 477, 1025, 12000, 82, 337, 365, 477, 1025, 12000,
+    
+    // endgame material score
+    94, 281, 297, 512, 936, 12000, 94, 281, 297, 512, 936, 12000
 };
 
 // game phase scores
@@ -162,5 +177,31 @@ const int MIRROR[64] = {
      A2,  B2,  C2,  D2,  E2,  F2,  G2,  H2,
      A1,  B1,  C1,  D1,  E1,  F1,  G1,  H1
 };
+
+// Masks that help determine pawn structures, king safety and piece mobility
+extern Bitboard FILE_MASKS[64];
+extern Bitboard RANK_MASKS[64];
+extern Bitboard ISOLATED_MASKS[64];
+extern Bitboard WHITE_PASS_MASKS[64];
+extern Bitboard BLACK_PASS_MASKS[64];
+
+// Functions generating masks that help determine pawn structures, king safety and piece mobility
+void generateFileMasks();
+void generateRankMasks();
+void generateIsolatedMasks();
+void generatePassMasks();
+
+// Penalty score for doubled pawns
+const int DOUBLE_PAWN_PENALTY = 10;
+
+// Penalty score for isolated pawns
+const int ISOLATED_PAWN_PENALTY = 15;
+
+// Bonus score for rooks on (semi) open files, and penalty score for kings on them
+const int OPEN_FILE_SCORE = 10;
+const int SEMI_OPEN_FILE_SCORE = 10;
+
+// Bonus score for kings that have a pawn shield before them
+const int PAWN_SHIELD_SCORE = 10;
 
 #endif

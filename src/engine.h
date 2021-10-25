@@ -8,6 +8,7 @@ const int INF = 50000;
 const int MAX_PLY = 64;
 
 // Used for move ordering
+const int BEST_MOVE_SCORE = 30000;
 const int PV_MOVE_SCORE = 20000;
 const int CAPTURE_SCORE = 10000;
 const int FIRST_KILLER_SCORE = 9000;
@@ -60,6 +61,7 @@ struct HashEntry
 	int depth;
 	int flag;
 	int score;
+	int bestMove;
 };
 
 class Engine
@@ -86,21 +88,22 @@ public:
 	void search(Game curerntGame, int depth);
 	int PVS(int depth, int alpha, int beta);
 	int quiescenceSearch(int alpha, int beta);	
-	int scoreMove(int move);
-	void sortMoves(int * moveList);
+	int badCapture(int move);
+	int scoreMove(int move, int bestMove);
+	void sortMoves(int * moveList, int bestMove);
 	void enablePVScoring();
 	void resetEngine();
 	void clearTranspositionTable();
 	void initTranspositionTable(int mb);
-	int readHashEntry(int depth, int alpha, int beta);
-	void writeHashEntry(int depth, int alpha, int beta);
+	int readHashEntry(int depth, int alpha, int beta, int& bestMove);
+	void writeHashEntry(int depth, int bestMove, int score, int flag);
 	int isRepetition();
 	void printResults(int currentDepth, int depth_limit, int fullResults);	
 
 	/*** UCI Section ***/
 
 	int quit = 0;
-	int movestogo = 70;
+	int movestogo = 30;
 	int movetime = -1;
 	int uciTime = -1;
 	int inc = 0;

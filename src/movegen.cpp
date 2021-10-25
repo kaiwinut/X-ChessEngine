@@ -2,8 +2,7 @@
 #include <string>
 #include <cstring>
 #include <map>
-#include "bitboard.h"
-#include "types.h"
+#include "utils.h"
 #include "masks.h"
 #include "eval.h"
 #include "movegen.h"
@@ -16,24 +15,6 @@ using std::map;
 // Constructor of the class Game
 Game::Game()
 {
-	// Initialize new game state
-	side = WHITE;
-	enPassantSquare = SQ_NONE;
-	castlingRights = 0b1111;
-	moveNum = 0;
-	fiftyMoveRuleCount = 0;	
-	hashKey = 0x0;
-
-	for (int piece = P; piece <= k; piece ++)
-	{
-		bitboards[piece] = 0ULL;
-	}
-
-	for (int color = BLACK; color <= ALL; color ++)
-	{
-		occupancies[color] = 0ULL;
-	}
-
 	// Initialize piece bitboards and occupancy bitboard
 	initPieceBitboards();
 
@@ -62,19 +43,14 @@ void Game::parseFen(string fen)
 	// Reset every game state first
 	side = WHITE;
 	enPassantSquare = SQ_NONE;
-	castlingRights = 0x0;
+	castlingRights = 0;
 	moveNum = 0;
-	fiftyMoveRuleCount = 0;	
+	fiftyMoveRuleCount = 0;
+	hashKey = 0x0;
+	gamePhaseScore = 6766;
 
-	for (int piece = P; piece <= k; piece ++)
-	{
-		bitboards[piece] = 0ULL;
-	}
-
-	for (int color = BLACK; color <= ALL; color ++)
-	{
-		occupancies[color] = 0ULL;
-	}
+	memset(bitboards, 0ull, sizeof(bitboards));
+	memset(occupancies, 0ull, sizeof(occupancies));
 
 	// Initialize bitboards (count from index 56 since fen strings start from the 8th rank)
 	int count = 56;
@@ -155,60 +131,36 @@ void Game::parseFen(string fen)
 	// Initialize hash keys and generate a hash key of the current position
 	initHashKey();
 	hashKey = generateHashKey();
-}
-
-// Generate fen representation of the current game (Not yet done!)
-string Game::generateFen()
-{
-	return "Yet to be done!";
+	gamePhaseScore = getGamePhaseScore(*this);
+	checkMask = getCheckMask(side ^ 1);
 }
 
 // Initilize bitboards for 12 pieces and 3 occupancy maps
 void Game::initPieceBitboards()
 {
 	// Initilize bitboards for 12 pieces
-	bitboards[P] |= RANK_2_MASK;
-	bitboards[N] = setBit(bitboards[N], B1);
-	bitboards[N] = setBit(bitboards[N], G1); 
-	bitboards[B] = setBit(bitboards[B], C1);
-	bitboards[B] = setBit(bitboards[B], F1);
-	bitboards[R] = setBit(bitboards[R], A1);
-	bitboards[R] = setBit(bitboards[R], H1);
-	bitboards[Q] = setBit(bitboards[Q], D1);
-	bitboards[K] = setBit(bitboards[K], E1);
-	bitboards[p] |= RANK_7_MASK;
-	bitboards[n] = setBit(bitboards[n], B8);
-	bitboards[n] = setBit(bitboards[n], G8); 
-	bitboards[b] = setBit(bitboards[b], C8);
-	bitboards[b] = setBit(bitboards[b], F8);
-	bitboards[r] = setBit(bitboards[r], A8);
-	bitboards[r] = setBit(bitboards[r], H8);
-	bitboards[q] = setBit(bitboards[q], D8);
-	bitboards[k] = setBit(bitboards[k], E8);
+	bitboards[P] = RANK_2_MASK;
+	bitboards[N] = (FILE_B_MASK | FILE_G_MASK) & RANK_1_MASK;
+	bitboards[B] = (FILE_C_MASK | FILE_F_MASK) & RANK_1_MASK;
+	bitboards[R] = (FILE_A_MASK | FILE_H_MASK) & RANK_1_MASK;
+	bitboards[Q] = FILE_D_MASK & RANK_1_MASK;
+	bitboards[K] = FILE_E_MASK & RANK_1_MASK;
+	bitboards[p] = RANK_7_MASK;
+	bitboards[n] = (FILE_B_MASK | FILE_G_MASK) & RANK_8_MASK;
+	bitboards[b] = (FILE_C_MASK | FILE_F_MASK) & RANK_8_MASK;
+	bitboards[r] = (FILE_A_MASK | FILE_H_MASK) & RANK_8_MASK;
+	bitboards[q] = FILE_D_MASK & RANK_8_MASK;
+	bitboards[k] = FILE_E_MASK & RANK_8_MASK;
 
 	// Initilize bitboards for 3 occupancy maps
 	occupancies[WHITE] |= (bitboards[P] | bitboards[N] | bitboards[B] | bitboards[R] | bitboards[Q] | bitboards[K]);
 	occupancies[BLACK] |= (bitboards[p] | bitboards[n] | bitboards[b] | bitboards[r] | bitboards[q] | bitboards[k]);
 	occupancies[ALL] |= occupancies[WHITE] | occupancies[BLACK];
-
-	if (DEBUG_GAME)
-	{
-		// Uncomment this to show piece bitboards for debugging purposes
-		// for (int piece = P; piece <= k; piece++)
-		// {
-		// 	displayBitboard(bitboards[piece]);
-		// }
-
-		// // Uncomment this to show occupancy bitboards for debugging purposes
-		// for (int color = BLACK; color <= ALL; color ++)
-		// {
-		// 	displayBitboard(occupancies[color]);
-		// }
-	}
 }
 
 void Game::initHashKey()
 {
+	// Initialize piece hash keys
 	for (int piece = P; piece <= k; piece ++)
 	{
 		for (int square = 0; square < 64; square ++)
@@ -216,23 +168,31 @@ void Game::initHashKey()
 			PIECE_KEY[piece][square] = generateRandomUint64();
 		}
 	}
+
+	// Initialize en passant hash keys
 	for (int square = 0; square < 64; square ++)
 	{
 		ENPASSANT_KEY[square] = generateRandomUint64();
 	}
+
+	// Initialize side hash key
 	SIDE_KEY = generateRandomUint64();
+
+	// Initilize castle right hash key
 	for (int i = 0; i < 16; i ++)
 	{
 		CASTLE_KEY[i] = generateRandomUint64();
 	}
 }
 
+// Generate hash key of position from scratch
 uint64_t Game::generateHashKey()
 {
 	uint64_t key = 0x0;
+	uint64_t bb;
 	int square;
-	Bitboard bb;
 
+	// Hash pieces
 	for (int piece = P; piece <= k; piece ++)
 	{
 		bb = bitboards[piece];
@@ -243,80 +203,23 @@ uint64_t Game::generateHashKey()
 			bb = popBit(bb, square);
 		}
 	}
+	
+	// Hash en passant square
 	if (enPassantSquare != SQ_NONE)
 	{
 		key ^= ENPASSANT_KEY[enPassantSquare];
 	}
-
+	
+	// Hash castle right
 	key ^= CASTLE_KEY[castlingRights];
 
+	// Hash side (only when it is blacks side)
 	if (side == BLACK)
 	{
 		key ^= SIDE_KEY;
 	}
 
 	return key;
-}
-
-void Game::displayGame()
-{
-	int index;
-	string osName;
-
-	#ifdef __APPLE__
-		osName = "Mac OSX";
-	#else
-		osName = "Others";
-	#endif
-
-	cout << "Hash: " << hashKey << std::endl;
-
-	for (int rank = RANK_8; rank >= RANK_1; rank--)
-	{
-		cout << rank + 1 << "  ";
-		for (int file = FILE_A; file <= FILE_H; file++)
-		{
-			index = rank * 8 + file;
-			if (!getBit(occupancies[ALL], index))
-			{
-				cout <<  ". ";					
-			}
-			else
-			{
-				for (int piece = P; piece <= k; piece++)
-				{
-					if (getBit(bitboards[piece], index))
-					{
-						cout <<  (osName.compare("Mac OSX") == 0 ? UNICODE_PIECES[piece] : ASCII_PIECES[piece]);
-						cout << ' ';
-						break;
-					}
-				}
-			}	
-		}
-		cout << endl;
-	}
-	cout << endl;
-	cout << "   a b c d e f g h\n" << endl;
-
-	cout << "   Side:     " << (side == WHITE ? "White" : "Black") << endl;
-	cout << "   Enp.:        " << (enPassantSquare != SQ_NONE ? SQUARES[enPassantSquare] : "--") << endl;
-
-	map <int, string> CASTLERIGHTS = {{0, "----"}, {1, "K---"}, {2, "-Q--"}, {3, "KQ--"}, {4, "--k-"}, {5, "K-k-"}, {6, "-Qk-"}, {7, "KQk-"},
-									 {8, "---q"}, {9, "K--q"}, {10, "-Q-q"}, {11, "KQ-q"}, {12, "--kq"}, {13, "K-kq"}, {14, "-Qkq"}, {15, "KQkq"}};
-
-	cout << "   Cast.:     " << CASTLERIGHTS[castlingRights] << endl;
-	cout << "   Eval.:      " << evaluate(*this) << std::endl;
-
-	cout << endl;
-}
-
-/* 
-	Move encoding / decoding
-*/
-static inline int encodeMove(int start, int end, int piece, int promotion, int capturedPiece, int capture, int doublePush, int enPassant, int castling)
-{
-	return start | (end << 6) | (piece << 12) | (promotion << 16) | (capturedPiece << 20) | (capture << 24) | (doublePush << 25) | (enPassant << 26) | (castling << 27);
 }
 
 void Game::takeBack(GameState prevState)
@@ -330,6 +233,8 @@ void Game::takeBack(GameState prevState)
 	moveNum = prevState.moveNum;
 	fiftyMoveRuleCount = prevState.fiftyMoveRuleCount;
 	hashKey = prevState.hashKey;
+	gamePhaseScore = prevState.gamePhaseScore;
+	checkMask = prevState.checkMask;
 }
 
 GameState Game::makeNullMove()
@@ -344,6 +249,8 @@ GameState Game::makeNullMove()
 	prevState.moveNum = moveNum;
 	prevState.fiftyMoveRuleCount = fiftyMoveRuleCount;
 	prevState.hashKey = hashKey;
+	prevState.gamePhaseScore = gamePhaseScore;
+	prevState.checkMask = checkMask;
 
 	// Reset the en passant square
 	if (enPassantSquare != SQ_NONE)
@@ -384,9 +291,23 @@ GameState Game::makeMove(int move, int moveType)
 	prevState.moveNum = moveNum;
 	prevState.fiftyMoveRuleCount = fiftyMoveRuleCount;
 	prevState.hashKey = hashKey;
+	prevState.gamePhaseScore = gamePhaseScore;
+	prevState.checkMask = checkMask;
 
 	// Check move flag
 	if (moveType == ONLY_CAPTURES && capture == 0)
+	{
+		prevState.valid = 0; 
+		return prevState;
+	}
+
+	if (checkMask != 0 && (piece != K && piece != k) && (((1ull << end) & checkMask) == 0))
+	{
+		prevState.valid = 0; 
+		return prevState;
+	}
+
+	if (checkMask != 0 && (piece == K && piece == k) && ((1ull << end) & checkMask))
 	{
 		prevState.valid = 0; 
 		return prevState;
@@ -501,9 +422,9 @@ GameState Game::makeMove(int move, int moveType)
 	hashKey ^= CASTLE_KEY[castlingRights];
 
 	// Reset occupancy masks
-	occupancies[WHITE] = 0ULL;
-	occupancies[BLACK] = 0ULL;
-	occupancies[ALL] = 0ULL;
+	occupancies[WHITE] = 0ull;
+	occupancies[BLACK] = 0ull;
+	occupancies[ALL] = 0ull;
 	// Loop over pieces to update occupancy mask
 	for (int whitePiece = P; whitePiece <= K; whitePiece ++)
 	{
@@ -533,15 +454,31 @@ GameState Game::makeMove(int move, int moveType)
 	side ^= 1;
 	hashKey ^= SIDE_KEY;
 
+	// Update game phase score
+	if (capturedPiece != NULL_PIECE && capturedPiece != P && capturedPiece != K && capturedPiece != p && capturedPiece != k)
+	{
+		gamePhaseScore -= MATERIAL_ABS[OPENING][capturedPiece];
+	}
+	if (promotion != NULL_PIECE)
+	{
+		gamePhaseScore += MATERIAL_ABS[OPENING][promotion];
+	}
+
 	// Hash from scratch to check for errors
 	if (DEBUG_GAME)
 	{
+		// cout << piece << SQUARES[start] << SQUARES[end] << castlingRights << endl;
 		uint64_t hashFromScratch = generateHashKey();
 		assert(hashKey == hashFromScratch);
+
+		// int gamePhaseScoreFromScratch = getGamePhaseScore(*this);
+		// assert(gamePhaseScore == gamePhaseScoreFromScratch);		
 	}
 
-	Bitboard playerKing = (side == BLACK ? bitboards[K] : bitboards[k]);
-	if (isSquareAttacked(getLeastSignificantBitIndex(playerKing), side))
+	checkMask = getCheckMask(side ^ 1);
+
+	Bitboard playerKingAfter = (side == BLACK ? bitboards[K] : bitboards[k]);
+	if (isSquareAttacked(getLeastSignificantBitIndex(playerKingAfter), side))
 	{
 		prevState.valid = 0;
 		takeBack(prevState);
@@ -873,7 +810,7 @@ void Game::generateAllMoves()
 	}
 	if (DEBUG_GAME)
 	{
-		printMoveList();
+		// printMoveList(*this);
 	}
 }
 
@@ -890,46 +827,40 @@ int Game::getCaptures(int target, int attacker)
 	return NULL_PIECE;	
 }
 
-int Game::isSquareAttacked(int square, int attacker)
+uint64_t Game::isSquareAttacked(int square, int attacker)
 {
-	if (attacker == WHITE) 
-	{
-		if (PAWN_ATTACKS[BLACK][square] & bitboards[P]) {return 1;}
-	}
-	else if (attacker == BLACK) 
-	{
-		if (PAWN_ATTACKS[WHITE][square] & bitboards[p]) {return 1;}
-	}
-	if (KNIGHT_ATTACKS[square] & (attacker == WHITE ? bitboards[N] : bitboards[n])) {return 1;}
-	if (KING_ATTACKS[square] & (attacker == WHITE ? bitboards[K] : bitboards[k])) {return 1;}
-	if (generateBishopAttacks(square, occupancies[ALL]) & (attacker == WHITE ? bitboards[B] : bitboards[b])) {return 1;}
-	if (generateRookAttacks(square, occupancies[ALL]) & (attacker == WHITE ? bitboards[R] : bitboards[r])) {return 1;}
-	if (generateQueenAttacks(square, occupancies[ALL]) & (attacker == WHITE ? bitboards[Q] : bitboards[q])) {return 1;}
-	return 0;
+	return (PAWN_ATTACKS[attacker ^ 1][square] & bitboards[p - 6 * attacker]) | (KNIGHT_ATTACKS[square] & bitboards[n - 6 * attacker]) | (KING_ATTACKS[square] & bitboards[k - 6 * attacker]) | (generateBishopAttacks(square, occupancies[ALL]) & bitboards[b - 6 * attacker]) | 
+						(generateRookAttacks(square, occupancies[ALL]) & bitboards[r - 6 * attacker]) | (generateQueenAttacks(square, occupancies[ALL]) & bitboards[q - 6 * attacker]);
 }
 
-void Game::printMoveList()
+uint64_t Game::getCheckMask(int attacker)
 {
-	cout << endl;
-	cout << "     Move   P.  Pr.  Cp.  Cf.  DP.  Ep.  Cs.\n" << endl;
-	int i = 1;
-	int *p = moveList;
-	while (*p != 0)
-	{
-		if (i < 10) { cout << " " << i << "   "; }
-		else { cout << i << "   "; }
-		cout << SQUARES[getStartSquare(*p)];
-		cout << SQUARES[getEndSquare(*p)] << "   ";
-		cout << UNICODE_PIECES[getPiece(*p)] << "    ";		
-		cout << UNICODE_PIECES[getPromotion(*p)] << "    ";
-		cout << UNICODE_PIECES[getCapturedPiece(*p)] << "    ";
-		cout << getCaptureFlag(*p) << "    ";
-		cout << getDoublePushFlag(*p) << "    ";
-		cout << getEnpassantFlag(*p) << "    ";
-		cout << getCastlingFlag(*p);
-		cout << endl;
-		i++;
-		p++;
-	}
-}
+	Bitboard playerKing = (attacker == BLACK ? bitboards[K] : bitboards[k]);
+	int square = getLeastSignificantBitIndex(playerKing);
 
+	uint64_t leaperCheck = (PAWN_ATTACKS[attacker ^ 1][square] & bitboards[p - 6 * attacker]) | (KNIGHT_ATTACKS[square] & bitboards[n - 6 * attacker]);
+	uint64_t batk = generateBishopAttacks(square, occupancies[ALL]);
+	uint64_t ratk = generateRookAttacks(square, occupancies[ALL]);
+	uint64_t bishopCheck = batk & bitboards[b - 6 * attacker];
+	uint64_t rookCheck = ratk & bitboards[r - 6 * attacker];
+	uint64_t queenCheck = 0ull;
+
+	if (bishopCheck)
+	{
+		bishopCheck = batk & ((bishopCheck) | generateBishopAttacks(getLeastSignificantBitIndex(bishopCheck), occupancies[ALL]));  
+	}
+	if (rookCheck)
+	{
+		rookCheck = ratk & (rookCheck | generateRookAttacks(getLeastSignificantBitIndex(rookCheck), occupancies[ALL]));
+	}
+	if (batk & bitboards[q - 6 * attacker])
+	{
+		queenCheck = batk & (batk & bitboards[q - 6 * attacker] | generateBishopAttacks(getLeastSignificantBitIndex(batk & bitboards[q - 6 * attacker]), occupancies[ALL]));
+	}
+	if (ratk & bitboards[q - 6 * attacker])
+	{
+		queenCheck = ratk & (ratk & bitboards[q - 6 * attacker] | generateRookAttacks(getLeastSignificantBitIndex(ratk & bitboards[q - 6 * attacker]), occupancies[ALL]));
+	}
+
+	return leaperCheck | bishopCheck | rookCheck | queenCheck;
+}

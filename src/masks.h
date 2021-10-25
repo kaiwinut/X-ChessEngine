@@ -31,11 +31,6 @@ const Bitboard RANK_6_MASK = RANK_5_MASK << 8;
 const Bitboard RANK_7_MASK = RANK_6_MASK << 8;
 const Bitboard RANK_8_MASK = RANK_7_MASK << 8;
 
-// Return pseudo legal bishop moves by converting the occupancy mask into a magic index, and look up pre-generated move list
-Bitboard generateBishopAttacks(int square, Bitboard occupancy);
-Bitboard generateRookAttacks(int square, Bitboard occupancy);
-Bitboard generateQueenAttacks(int square, Bitboard occupancy);
-
 extern Bitboard PAWN_ATTACKS[2][64];
 extern Bitboard KNIGHT_ATTACKS[64];
 extern Bitboard KING_ATTACKS[64];
@@ -198,7 +193,28 @@ const Bitboard BISHOP_MAGICS[64] = {
 	0x4010011029020020ULL	
 };
 
-// Random uint64 generator
+// Return pseudo legal bishop moves by converting the occupancy mask into a magic index, and look up pre-generated move list
+static inline Bitboard generateBishopAttacks(int square, Bitboard occupancy)
+{
+	occupancy &= BISHOP_RELEVANT_OCCUPANCY[square];
+	occupancy *= BISHOP_MAGICS[square];
+	occupancy >>= (64 - BISHOP_OCCUPANCY_COUNT[square]);
+	return BISHOP_ATTACKS[square][occupancy];
+}
+// Return pseudo legal rook moves by converting the occupancy mask into a magic index, and look up pre-generated move list
+static inline Bitboard generateRookAttacks(int square, Bitboard occupancy)
+{
+	occupancy &= ROOK_RELEVANT_OCCUPANCY[square];
+	occupancy *= ROOK_MAGICS[square];
+	occupancy >>= (64 - ROOK_OCCUPANCY_COUNT[square]);
+	return ROOK_ATTACKS[square][occupancy];
+}
+// Return pseudo legal queen moves by converting the occupancy mask into a magic index, and look up pre-generated move list
+static inline Bitboard generateQueenAttacks(int square, Bitboard occupancy)
+{
+	return generateBishopAttacks(square, occupancy) | generateRookAttacks(square, occupancy);
+}
+
 uint64_t generateRandomUint64();
 
 #endif

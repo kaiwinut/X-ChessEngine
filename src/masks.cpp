@@ -1,7 +1,6 @@
 #include <iostream>
 #include <cstring>
-#include "types.h"
-#include "bitboard.h"
+#include "utils.h"
 #include "masks.h"
 
 using std::cout;
@@ -338,30 +337,6 @@ void initSlideAttacks(int isRook)
 	}
 }
 
-// Return pseudo legal bishop moves by converting the occupancy mask into a magic index, and look up pre-generated move list
-Bitboard generateBishopAttacks(int square, Bitboard occupancy)
-{
-	occupancy &= BISHOP_RELEVANT_OCCUPANCY[square];
-	occupancy *= BISHOP_MAGICS[square];
-	occupancy >>= (64 - BISHOP_OCCUPANCY_COUNT[square]);
-	return BISHOP_ATTACKS[square][occupancy];
-}
-// Return pseudo legal rook moves by converting the occupancy mask into a magic index, and look up pre-generated move list
-Bitboard generateRookAttacks(int square, Bitboard occupancy)
-{
-	occupancy &= ROOK_RELEVANT_OCCUPANCY[square];
-	occupancy *= ROOK_MAGICS[square];
-	occupancy >>= (64 - ROOK_OCCUPANCY_COUNT[square]);
-	return ROOK_ATTACKS[square][occupancy];
-}
-// Return pseudo legal queen moves by converting the occupancy mask into a magic index, and look up pre-generated move list
-Bitboard generateQueenAttacks(int square, Bitboard occupancy)
-{
-	return generateBishopAttacks(square, occupancy) | generateRookAttacks(square, occupancy);
-}
-
-/*** Generation of magic numbers (Uncomment functions to run in debug mode) ***/
-
 uint32_t randomSeed = 1804289383;
 
 uint32_t generateRandomUint32()
@@ -376,12 +351,14 @@ uint32_t generateRandomUint32()
 
 uint64_t generateRandomUint64()
 {
-	Bitboard n1 = (uint64_t)(generateRandomUint32() & 0xFFFF);
-	Bitboard n2 = (uint64_t)(generateRandomUint32() & 0xFFFF);
-	Bitboard n3 = (uint64_t)(generateRandomUint32() & 0xFFFF);
-	Bitboard n4 = (uint64_t)(generateRandomUint32() & 0xFFFF);
+	uint64_t n1 = (uint64_t)(generateRandomUint32() & 0xFFFF);
+	uint64_t n2 = (uint64_t)(generateRandomUint32() & 0xFFFF);
+	uint64_t n3 = (uint64_t)(generateRandomUint32() & 0xFFFF);
+	uint64_t n4 = (uint64_t)(generateRandomUint32() & 0xFFFF);
 	return n1 | (n2 << 16) | (n3 << 32) | (n4 << 48);
 }
+
+/*** Generation of magic numbers (Uncomment functions to run in debug mode) ***/
 
 uint64_t generateMagicCandidate()
 {

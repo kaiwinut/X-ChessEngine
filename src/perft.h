@@ -9,9 +9,9 @@ class Perft
 public:
 	std::string fen;
 	int depth;
-	int nodesSearched;
-	float duration;
-	float knps;
+	long nodesSearched;
+	int duration;
+	int knps;
 	Game game;
 	
 	Perft(std::string fen, int depth);
